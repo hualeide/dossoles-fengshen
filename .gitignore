@@ -1,0 +1,8 @@
+/data/
+/out/
+.codegraph/
+.cursor/
+__pycache__/
+*.pyc
+*.env
+

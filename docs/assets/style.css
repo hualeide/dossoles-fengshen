@@ -1,0 +1,263 @@
+:root {
+  --bg: #0c1114;
+  --card: #151c21;
+  --line: #27343c;
+  --gold: #e2c27a;
+  --silver: #c9d4dc;
+  --bronze: #d0925e;
+  --text: #efe8dc;
+  --muted: #8b9aa3;
+  --accent: #4eb3c2;
+  --row: #12181d;
+}
+* { box-sizing: border-box; }
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 14px/1.5 "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+}
+a { color: var(--accent); text-decoration: none; }
+a:hover { text-decoration: underline; }
+.hero, .stats, .podium, .chart-wrap, .board, footer {
+  max-width: 1080px;
+  margin: 0 auto;
+  padding: 22px 20px;
+}
+.hero { padding-bottom: 8px; }
+.hero h1 {
+  font-size: clamp(28px, 5vw, 42px);
+  font-weight: 700;
+  line-height: 1.15;
+  margin: 8px 0 10px;
+  letter-spacing: 0.03em;
+}
+.kicker, .hint, .sub, footer { color: var(--muted); margin: 0; }
+.note { color: var(--gold); margin: 10px 0 0; font-size: 13px; }
+.links { margin: 12px 0 0; }
+.stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
+  gap: 8px;
+  padding-top: 0;
+}
+.stat {
+  background: var(--card);
+  border: 1px solid var(--line);
+  padding: 12px 14px;
+}
+.stat b {
+  display: block;
+  font-size: 20px;
+  font-variant-numeric: tabular-nums;
+  color: var(--gold);
+}
+.stat span { font-size: 12px; color: var(--muted); }
+
+.podium {
+  display: grid;
+  grid-template-columns: 1fr 1.15fr 1fr;
+  gap: 10px;
+  align-items: stretch;
+  padding-top: 0;
+}
+.podium .card { order: 2; }
+.podium .card:nth-child(1) { order: 2; transform: translateY(-8px); }
+.podium .card:nth-child(2) { order: 1; }
+.podium .card:nth-child(3) { order: 3; }
+.card {
+  background: var(--card);
+  border: 1px solid var(--line);
+  padding: 16px 16px 14px;
+}
+.card.m1 { border-color: #c9a352; }
+.card.m2 { border-color: #8ea0ab; }
+.card.m3 { border-color: #a56d3e; }
+.card .place {
+  font-size: 12px;
+  letter-spacing: 0.12em;
+  color: var(--muted);
+}
+.card .name {
+  font-size: 18px;
+  font-weight: 700;
+  margin: 6px 0 2px;
+}
+.card .uid { font-size: 12px; color: var(--muted); }
+.card .nums {
+  display: flex;
+  gap: 16px;
+  margin: 12px 0 8px;
+  font-variant-numeric: tabular-nums;
+}
+.card .nums b { display: block; font-size: 18px; }
+.card .nums span { font-size: 11px; color: var(--muted); }
+.card .quote {
+  color: var(--muted);
+  font-size: 12px;
+  border-top: 1px solid var(--line);
+  padding-top: 8px;
+}
+
+.sec-head { display: flex; flex-direction: column; gap: 4px; margin-bottom: 10px; }
+.sec-head h2, .board-head h2 { margin: 0; font-size: 18px; }
+.chart-box { position: relative; }
+#chart {
+  display: block;
+  width: 100%;
+  height: 240px;
+  background: var(--card);
+  border: 1px solid var(--line);
+}
+.tip {
+  position: absolute;
+  pointer-events: none;
+  background: #0c1114;
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-size: 12px;
+  padding: 6px 8px;
+  white-space: nowrap;
+}
+
+.board-head {
+  display: flex;
+  gap: 12px;
+  align-items: flex-end;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+#q {
+  width: min(280px, 100%);
+  padding: 9px 11px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+.table-wrap {
+  overflow-x: auto;
+  border: 1px solid var(--line);
+  background: var(--card);
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+thead th {
+  position: sticky;
+  top: 0;
+  background: #1b242b;
+  color: var(--muted);
+  font-weight: 600;
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  z-index: 1;
+}
+td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--line);
+  vertical-align: middle;
+}
+tbody tr:nth-child(even) { background: var(--row); }
+tbody tr:hover { background: #1c272e; }
+.col-rank { width: 64px; text-align: center; }
+.col-num { text-align: right; width: 92px; }
+td.col-num, th.col-num { text-align: right; font-variant-numeric: tabular-nums; }
+.medal {
+  display: inline-flex;
+  width: 28px;
+  height: 28px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.medal.m1 { background: #e2c27a; color: #1a1408; }
+.medal.m2 { background: #c5d0d8; color: #1a1e22; }
+.medal.m3 { background: #d0925e; color: #1a120c; }
+.rank-n { color: var(--muted); font-variant-numeric: tabular-nums; }
+.user {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  min-width: 160px;
+}
+.av {
+  flex: 0 0 32px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-weight: 700;
+  color: #0c1114;
+}
+.uname { font-weight: 650; }
+.uid {
+  display: block;
+  font-size: 12px;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.bar {
+  height: 3px;
+  margin-top: 5px;
+  background: #2d4a52;
+  border-radius: 1px;
+}
+.bar i {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+}
+.sample {
+  color: var(--muted);
+  max-width: 320px;
+}
+.sample::before { content: "「"; color: #5d6d75; }
+.sample::after { content: "」"; color: #5d6d75; }
+tr.top1 { background: #1c1910; }
+tr.top2 { background: #171b1e; }
+tr.top3 { background: #1b1612; }
+
+.pager {
+  margin-top: 12px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.pager button {
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--line);
+  padding: 6px 10px;
+  cursor: pointer;
+}
+.pager button.on { border-color: var(--gold); color: var(--gold); }
+.jump { color: var(--muted); font-size: 13px; }
+.jump input {
+  width: 72px;
+  margin-left: 4px;
+  padding: 5px 6px;
+  background: var(--bg);
+  color: var(--text);
+  border: 1px solid var(--line);
+}
+.count { margin-left: auto; color: var(--muted); font-size: 12px; font-variant-numeric: tabular-nums; }
+
+@media (max-width: 800px) {
+  .podium { grid-template-columns: 1fr; }
+  .podium .card, .podium .card:nth-child(1),
+  .podium .card:nth-child(2), .podium .card:nth-child(3) {
+    order: 0;
+    transform: none;
+  }
+  .sample { max-width: 140px; }
+}

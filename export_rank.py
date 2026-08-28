@@ -1,0 +1,529 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""Export 封神榜 xlsx in the 异环 comment-user-stats format."""
+from __future__ import annotations
+
+import csv
+import re
+import sqlite3
+import sys
+from collections import defaultdict
+from datetime import datetime
+from pathlib import Path
+
+import xlsxwriter
+
+BVID = "BV1fy4y1L7Rq"
+TITLE = "《明日方舟》夏日嘉年华限时活动宣传PV"
+AID = 804313673
+PUBDATE = 1627215310
+ROOT = Path(__file__).resolve().parent
+DB = ROOT / "data" / "comments.sqlite"
+OUT = ROOT / "out"
+XLSX = OUT / "明日方舟_多索雷斯假日_评论用户统计.xlsx"
+CSV_USERS = OUT / "封神榜.csv"
+CSV_COMMENTS = OUT / "评论明细.csv"
+CSV_HOURS = OUT / "时段统计.csv"
+EXCEL_ROWS = 1_048_000
+CELL_LIMIT = 32000
+EXCEL_JOIN = 400
+ILLEGAL_XML = re.compile(r"[\x00-\x08\x0B\x0C\x0E-\x1F]")
+
+USER_HEADERS = [
+    "排名",
+    "用户名",
+    "UID",
+    "等级",
+    "性别",
+    "评论数",
+    "占比%",
+    "点赞合计",
+    "首次评论",
+    "末次评论",
+    "持续天数",
+    "峰值小时条数",
+    "峰值小时",
+    "评论样例",
+    "评论拼接",
+]
+
+
+def xml_cell(v: object, limit: int = 0) -> str:
+    s = ILLEGAL_XML.sub("", "" if v is None else str(v))
+    if limit and len(s) > limit:
+        s = s[:limit]
+    if s[:1] in ("=", "+", "-", "@"):
+        s = "'" + s
+    return s
+
+
+def ts_fmt(ts: int | None) -> str:
+    if not ts:
+        return ""
+    return datetime.fromtimestamp(int(ts)).strftime("%Y-%m-%d %H:%M:%S")
+
+
+def user_row(rank: int, u: dict, total: int, samples: dict, all_text: dict) -> list:
+    peak_h, peak_n = ("", 0)
+    if u["hours"]:
+        peak_h, peak_n = max(u["hours"].items(), key=lambda kv: kv[1])
+    days = 0
+    if u["first"] and u["last"]:
+        days = max(0, (u["last"] - u["first"]) // 86400)
+    return [
+        rank,
+        u["uname"],
+        u["mid"],
+        u["level"],
+        u["sex"],
+        u["n"],
+        round(u["n"] * 100 / total, 4),
+        u["likes"],
+        ts_fmt(u["first"]),
+        ts_fmt(u["last"]),
+        days,
+        peak_n,
+        peak_h,
+        " | ".join(samples.get(u["mid"], [])),
+        " | ".join(all_text.get(u["mid"], []))[:CELL_LIMIT],
+    ]
+
+
+def main() -> None:
+    if not DB.exists():
+        raise SystemExit("no db yet, run scrape_comments.py first")
+    OUT.mkdir(parents=True, exist_ok=True)
+    conn = sqlite3.connect(f"file:{DB.as_posix()}?mode=ro", uri=True, timeout=120)
+    conn.row_factory = sqlite3.Row
+    official = conn.execute("SELECT v FROM meta WHERE k='official_count'").fetchone()
+    official_n = int(official["v"]) if official else 0
+    stored = conn.execute("SELECT COUNT(*) n FROM comments").fetchone()["n"]
+    user_n = conn.execute("SELECT COUNT(DISTINCT mid) n FROM comments").fetchone()["n"]
+    tmin, tmax = conn.execute("SELECT MIN(ctime), MAX(ctime) FROM comments").fetchone()
+
+    users: dict[int, dict] = {}
+    hour_count: dict[str, int] = defaultdict(int)
+    samples: dict[int, list[str]] = defaultdict(list)
+    all_text: dict[int, list[str]] = defaultdict(list)
+
+    with CSV_COMMENTS.open("w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(
+            ["rpid", "时间", "UID", "用户名", "等级", "性别", "点赞", "类型", "root", "parent", "评论内容"]
+        )
+        cur = conn.execute(
+            "SELECT rpid,parent,root,mid,uname,sex,level,ctime,message,like_count "
+            "FROM comments ORDER BY ctime, rpid"
+        )
+        for row in cur:
+            mid = int(row["mid"])
+            uname = row["uname"] or ""
+            msg = row["message"] or ""
+            ctime = int(row["ctime"] or 0)
+            like = int(row["like_count"] or 0)
+            kind = "主评" if int(row["root"] or 0) == 0 else "回复"
+            writer.writerow(
+                [
+                    row["rpid"],
+                    ts_fmt(ctime),
+                    mid,
+                    uname,
+                    row["level"],
+                    row["sex"],
+                    like,
+                    kind,
+                    row["root"],
+                    row["parent"],
+                    msg,
+                ]
+            )
+            u = users.get(mid)
+            if u is None:
+                users[mid] = {
+                    "mid": mid,
+                    "uname": uname,
+                    "level": row["level"],
+                    "sex": row["sex"],
+                    "n": 1,
+                    "likes": like,
+                    "first": ctime,
+                    "last": ctime,
+                    "hours": defaultdict(int),
+                }
+                u = users[mid]
+            else:
+                if uname:
+                    u["uname"] = uname
+                u["level"] = row["level"] or u["level"]
+                u["sex"] = row["sex"] or u["sex"]
+                if ctime and (not u["first"] or ctime < u["first"]):
+                    u["first"] = ctime
+                if ctime > u["last"]:
+                    u["last"] = ctime
+                u["n"] += 1
+                u["likes"] += like
+            hour = datetime.fromtimestamp(ctime).strftime("%Y-%m-%d %H:00") if ctime else ""
+            if hour:
+                u["hours"][hour] += 1
+                hour_count[hour] += 1
+            if len(samples[mid]) < 5 and msg:
+                samples[mid].append(msg.replace("\n", " ")[:120])
+            if msg and sum(len(x) for x in all_text[mid]) < CELL_LIMIT:
+                all_text[mid].append(msg.replace("\n", " "))
+
+    ranked = sorted(users.values(), key=lambda x: (-x["n"], x["first"], x["mid"]))
+    total = stored or 1
+
+    with CSV_USERS.open("w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(USER_HEADERS)
+        for i, u in enumerate(ranked, 1):
+            writer.writerow(user_row(i, u, total, samples, all_text))
+
+    with CSV_HOURS.open("w", encoding="utf-8-sig", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["小时", "评论数"])
+        for h in sorted(hour_count):
+            writer.writerow([h, hour_count[h]])
+
+    wb = xlsxwriter.Workbook(
+        str(XLSX),
+        {
+            "strings_to_urls": False,
+            "strings_to_formulas": False,
+            "strings_to_numbers": False,
+        },
+    )
+    header_fmt = wb.add_format(
+        {"bold": True, "bg_color": "#1F4E79", "font_color": "white", "border": 1}
+    )
+    num_fmt = wb.add_format({"num_format": "0.0000"})
+    wrap = wb.add_format({"text_wrap": True, "valign": "top"})
+
+    top5 = ranked[:5]
+    top5_sum = sum(u["n"] for u in top5)
+    n1 = max(1, int(user_n * 0.01))
+    top1p = sum(u["n"] for u in ranked[:n1])
+    cover = stored * 100 / official_n if official_n else 0
+    overview = [
+        ("视频标题", TITLE),
+        ("BV号", BVID),
+        ("aid/oid", str(AID)),
+        ("发布时间", ts_fmt(PUBDATE)),
+        ("B站显示评论数", official_n),
+        ("本次入库评论数", stored),
+        ("覆盖率%", f"{cover:.2f}"),
+        ("用户数", user_n),
+        ("抓取时间窗", f"{ts_fmt(tmin)} ~ {ts_fmt(tmax)}"),
+        ("导出时间", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+        ("前1%用户贡献评论占比%", f"{top1p * 100 / total:.2f}"),
+        ("前五名合计占比%", f"{top5_sum * 100 / total:.2f}"),
+        ("前五名", "；".join(f"{u['uname']}({u['n']}条)" for u in top5)),
+        (
+            "格式说明",
+            "对齐异环《评论用户统计》封神榜：按评论数排名，含UID、等级、样例与拼接文本。评论明细因超过Excel行上限，完整数据在CSV。",
+        ),
+        (
+            "数据说明",
+            "未完成稿：主评尚未翻完（当前最早约2021-07-29，视频发布2021-07-25，发布后高峰仍缺），未爬楼中楼。"
+            "名次与条数之后还会变。仅统计公开评论接口；B站可能截断极旧楼层。",
+        ),
+    ]
+    ws0 = wb.add_worksheet("概述")
+    ws0.write_row(0, 0, ["字段", "值"], header_fmt)
+    for i, (k, v) in enumerate(overview, 1):
+        ws0.write(i, 0, k)
+        ws0.write(i, 1, v)
+    ws0.set_column(0, 0, 22)
+    ws0.set_column(1, 1, 90)
+
+    ws1 = wb.add_worksheet("封神榜")
+    ws1.write_row(0, 0, USER_HEADERS, header_fmt)
+    limit = min(len(ranked), EXCEL_ROWS - 1)
+    for i, u in enumerate(ranked[:limit], 1):
+        row = user_row(i, u, total, samples, all_text)
+        row[1] = xml_cell(row[1])
+        row[4] = xml_cell(row[4])
+        row[13] = xml_cell(row[13], 2000)
+        row[14] = xml_cell(row[14], EXCEL_JOIN)
+        ws1.write_row(i, 0, row)
+        ws1.write_number(i, 6, row[6], num_fmt)
+    ws1.set_column(0, 0, 8)
+    ws1.set_column(1, 1, 22)
+    ws1.set_column(2, 2, 14)
+    ws1.set_column(13, 14, 60, wrap)
+    ws1.freeze_panes(1, 0)
+    ws1.autofilter(0, 0, limit, 14)
+
+    ws2 = wb.add_worksheet("时段统计")
+    ws2.write_row(0, 0, ["小时", "评论数"], header_fmt)
+    hours = sorted(hour_count)
+    for i, h in enumerate(hours[: EXCEL_ROWS - 1], 1):
+        ws2.write(i, 0, h)
+        ws2.write(i, 1, hour_count[h])
+    ws2.set_column(0, 0, 20)
+
+    note = wb.add_worksheet("说明")
+    note.write_row(0, 0, ["项", "路径"], header_fmt)
+    note.write_row(1, 0, ["完整封神榜CSV", str(CSV_USERS)])
+    note.write_row(2, 0, ["完整评论明细CSV", str(CSV_COMMENTS)])
+    note.write_row(3, 0, ["SQLite原始库", str(DB)])
+    note.write_row(4, 0, ["完成状态", "未完成，发布后头几天主评未齐，未爬楼中楼"])
+    note.set_column(0, 0, 22)
+    note.set_column(1, 1, 80)
+    wb.close()
+
+    print(f"xlsx={XLSX}")
+    print(f"users={CSV_USERS}")
+    print(f"comments={CSV_COMMENTS}")
+    print(f"stored={stored} users={user_n} official={official_n}")
+
+
+def build_xlsx_from_csv(dest: Path | None = None) -> Path:
+    dest = dest or XLSX
+    conn = sqlite3.connect(f"file:{DB.as_posix()}?mode=ro", uri=True, timeout=60)
+    official = conn.execute("SELECT v FROM meta WHERE k='official_count'").fetchone()
+    official_n = int(official[0]) if official else 0
+    stored, user_n, tmin, tmax = conn.execute(
+        "SELECT COUNT(*), COUNT(DISTINCT mid), MIN(ctime), MAX(ctime) FROM comments"
+    ).fetchone()
+    conn.close()
+
+    wb = xlsxwriter.Workbook(
+        str(dest),
+        {
+            "strings_to_urls": False,
+            "strings_to_formulas": False,
+            "strings_to_numbers": False,
+        },
+    )
+    header_fmt = wb.add_format(
+        {"bold": True, "bg_color": "#1F4E79", "font_color": "white", "border": 1}
+    )
+    num_fmt = wb.add_format({"num_format": "0.0000"})
+    wrap = wb.add_format({"text_wrap": True, "valign": "top"})
+
+    hours: list[tuple[str, int]] = []
+    with CSV_HOURS.open("r", encoding="utf-8-sig", newline="") as f:
+        r = csv.reader(f)
+        next(r, None)
+        for row in r:
+            if len(row) >= 2:
+                hours.append((row[0], int(row[1] or 0)))
+
+    top5: list[tuple[str, str]] = []
+    ws1 = wb.add_worksheet("封神榜")
+    ws1.write_row(0, 0, USER_HEADERS, header_fmt)
+    limit = 0
+    with CSV_USERS.open("r", encoding="utf-8-sig", newline="") as f:
+        reader = csv.reader(f)
+        next(reader, None)
+        for i, row in enumerate(reader, 1):
+            if i <= 5 and len(row) > 5:
+                top5.append((row[1], row[5]))
+            if i >= EXCEL_ROWS:
+                break
+            while len(row) < 15:
+                row.append("")
+            row[1] = xml_cell(row[1])
+            row[4] = xml_cell(row[4])
+            row[13] = xml_cell(row[13], 2000)
+            row[14] = xml_cell(row[14], EXCEL_JOIN)
+            ws1.write_row(i, 0, row)
+            try:
+                ws1.write_number(i, 6, float(row[6]), num_fmt)
+            except Exception:
+                pass
+            limit = i
+            if i % 50000 == 0:
+                print(f"xlsx users {i}", flush=True)
+
+    ws1.set_column(0, 0, 8)
+    ws1.set_column(1, 1, 22)
+    ws1.set_column(2, 2, 14)
+    ws1.set_column(13, 14, 40, wrap)
+    ws1.freeze_panes(1, 0)
+    if limit:
+        ws1.autofilter(0, 0, limit, 14)
+
+    cover = stored * 100 / official_n if official_n else 0
+    overview = [
+        ("视频标题", TITLE),
+        ("BV号", BVID),
+        ("aid/oid", str(AID)),
+        ("发布时间", ts_fmt(PUBDATE)),
+        ("B站显示评论数", official_n),
+        ("本次入库评论数", stored),
+        ("覆盖率%", f"{cover:.2f}"),
+        ("用户数", user_n),
+        ("抓取时间窗", f"{ts_fmt(tmin)} ~ {ts_fmt(tmax)}"),
+        ("导出时间", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+        ("前五名", "；".join(f"{n}({c}条)" for n, c in top5)),
+        ("格式说明", "Excel里评论拼接已截断。完整拼接和明细在CSV。"),
+        (
+            "数据说明",
+            "未完成稿：主评尚未翻完（最早约2021-07-29），未爬楼中楼。名次之后还会变。",
+        ),
+    ]
+    ws0 = wb.add_worksheet("概述")
+    ws0.write_row(0, 0, ["字段", "值"], header_fmt)
+    for i, (k, v) in enumerate(overview, 1):
+        ws0.write(i, 0, k)
+        ws0.write(i, 1, xml_cell(v))
+    ws0.set_column(0, 0, 22)
+    ws0.set_column(1, 1, 90)
+    ws0.activate()
+
+    ws2 = wb.add_worksheet("时段统计")
+    ws2.write_row(0, 0, ["小时", "评论数"], header_fmt)
+    for i, (h, n) in enumerate(hours[: EXCEL_ROWS - 1], 1):
+        ws2.write(i, 0, h)
+        ws2.write(i, 1, n)
+    ws2.set_column(0, 0, 20)
+
+    note = wb.add_worksheet("说明")
+    note.write_row(0, 0, ["项", "路径"], header_fmt)
+    note.write_row(1, 0, ["完整封神榜CSV", str(CSV_USERS)])
+    note.write_row(2, 0, ["完整评论明细CSV", str(CSV_COMMENTS)])
+    note.write_row(3, 0, ["SQLite原始库", str(DB)])
+    note.write_row(4, 0, ["完成状态", "未完成，发布后头几天主评未齐，未爬楼中楼"])
+    note.write_row(5, 0, ["Excel说明", "评论拼接在表里只留前400字，完整内容看封神榜.csv"])
+    note.set_column(0, 0, 22)
+    note.set_column(1, 1, 80)
+    wb.close()
+    print(f"xlsx={dest} size={dest.stat().st_size}", flush=True)
+    return dest
+
+
+LEAN_HEADERS = USER_HEADERS[:13]
+
+
+def _overview_rows(stored: int, user_n: int, official_n: int, tmin: int, tmax: int, top5: list[tuple[str, str]]) -> list[tuple[str, object]]:
+    cover = stored * 100 / official_n if official_n else 0
+    return [
+        ("视频标题", TITLE),
+        ("BV号", BVID),
+        ("aid/oid", str(AID)),
+        ("发布时间", ts_fmt(PUBDATE)),
+        ("B站显示评论数", official_n),
+        ("本次入库评论数", stored),
+        ("覆盖率%", f"{cover:.2f}"),
+        ("用户数", user_n),
+        ("抓取时间窗", f"{ts_fmt(tmin)} ~ {ts_fmt(tmax)}"),
+        ("导出时间", datetime.now().strftime("%Y-%m-%d %H:%M:%S")),
+        ("前五名", "；".join(f"{n}({c}条)" for n, c in top5)),
+        ("格式说明", "Excel不含评论拼接/样例，避免打不开。完整内容在封神榜.csv。"),
+        ("数据说明", "未完成稿：主评尚未翻完（最早约2021-07-29），未爬楼中楼。名次之后还会变。"),
+    ]
+
+
+def build_xlsx_lean() -> Path:
+    dest = OUT / "明日方舟_多索雷斯假日_封神榜.xlsx"
+    dest_top = OUT / "明日方舟_多索雷斯假日_封神榜_前1万.xlsx"
+    conn = sqlite3.connect(f"file:{DB.as_posix()}?mode=ro", uri=True, timeout=30)
+    official = conn.execute("SELECT v FROM meta WHERE k='official_count'").fetchone()
+    official_n = int(official[0]) if official else 0
+    stored, tmin, tmax = conn.execute(
+        "SELECT COUNT(*), MIN(ctime), MAX(ctime) FROM comments"
+    ).fetchone()
+    conn.close()
+
+    def write_one(path: Path, max_rows: int) -> None:
+        wb = xlsxwriter.Workbook(
+            str(path),
+            {
+                "constant_memory": True,
+                "strings_to_urls": False,
+                "strings_to_formulas": False,
+                "strings_to_numbers": False,
+            },
+        )
+        header_fmt = wb.add_format(
+            {"bold": True, "bg_color": "#1F4E79", "font_color": "white", "border": 1}
+        )
+        num_fmt = wb.add_format({"num_format": "0.0000"})
+        top5: list[tuple[str, str]] = []
+        n_users = 414217
+        with CSV_USERS.open("r", encoding="utf-8-sig", newline="") as f:
+            reader = csv.reader(f)
+            next(reader, None)
+            for i, row in enumerate(reader, 1):
+                if i <= 5 and len(row) > 5:
+                    top5.append((row[1], row[5]))
+                if i >= 5:
+                    break
+
+        ws0 = wb.add_worksheet("概述")
+        ws0.write_row(0, 0, ["字段", "值"], header_fmt)
+        for i, (k, v) in enumerate(
+            _overview_rows(stored, n_users, official_n, tmin, tmax, top5),
+            1,
+        ):
+            ws0.write(i, 0, k)
+            ws0.write(i, 1, xml_cell(v))
+        ws0.set_column(0, 0, 22)
+        ws0.set_column(1, 1, 90)
+
+        ws1 = wb.add_worksheet("封神榜")
+        ws1.write_row(0, 0, LEAN_HEADERS, header_fmt)
+        ws1.set_column(0, 0, 8)
+        ws1.set_column(1, 1, 22)
+        ws1.set_column(2, 2, 14)
+        ws1.freeze_panes(1, 0)
+        with CSV_USERS.open("r", encoding="utf-8-sig", newline="") as f:
+            reader = csv.reader(f)
+            next(reader, None)
+            for i, row in enumerate(reader, 1):
+                if i > max_rows:
+                    break
+                while len(row) < 13:
+                    row.append("")
+                lean = [xml_cell(x) for x in row[:13]]
+                ws1.write_row(i, 0, lean)
+                try:
+                    ws1.write_number(i, 6, float(row[6]), num_fmt)
+                except Exception:
+                    pass
+                if i % 50000 == 0:
+                    print(f"{path.name} {i}", flush=True)
+
+        ws2 = wb.add_worksheet("时段统计")
+        ws2.write_row(0, 0, ["小时", "评论数"], header_fmt)
+        ws2.set_column(0, 0, 20)
+        with CSV_HOURS.open("r", encoding="utf-8-sig", newline="") as f:
+            r = csv.reader(f)
+            next(r, None)
+            for i, row in enumerate(r, 1):
+                if len(row) >= 2:
+                    ws2.write(i, 0, row[0])
+                    try:
+                        ws2.write_number(i, 1, int(row[1]))
+                    except Exception:
+                        ws2.write(i, 1, row[1])
+
+        note = wb.add_worksheet("说明")
+        note.write_row(0, 0, ["项", "路径"], header_fmt)
+        note.write_row(1, 0, ["完整封神榜CSV", str(CSV_USERS)])
+        note.write_row(2, 0, ["本表不含", "评论样例、评论拼接（否则Excel打不开）"])
+        note.write_row(3, 0, ["完成状态", "未完成，发布后头几天主评未齐，未爬楼中楼"])
+        note.set_column(0, 0, 22)
+        note.set_column(1, 1, 80)
+        wb.close()
+        print(f"xlsx={path} size={path.stat().st_size}", flush=True)
+
+    write_one(dest_top, 10000)
+    write_one(dest, EXCEL_ROWS)
+    return dest
+
+
+if __name__ == "__main__":
+    if "--lean" in sys.argv:
+        build_xlsx_lean()
+    elif "--from-csv" in sys.argv:
+        out = XLSX
+        if "--alt" in sys.argv:
+            out = OUT / "明日方舟_多索雷斯假日_评论用户统计_可打开.xlsx"
+        build_xlsx_from_csv(out)
+    else:
+        main()
+

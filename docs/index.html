@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>多索雷斯假日 · 评论封神榜</title>
+  <link rel="stylesheet" href="./assets/style.css" />
+</head>
+<body>
+  <header class="hero">
+    <p class="kicker">未完成稿 · BV1fy4y1L7Rq</p>
+    <h1>多索雷斯假日<br />评论封神榜</h1>
+    <p class="sub">按评论数排名。数据来自 B 站公开评论接口已入库部分。</p>
+    <p class="note" id="note"></p>
+    <p class="links">
+      <a id="video" href="https://www.bilibili.com/video/BV1fy4y1L7Rq/" target="_blank" rel="noopener">原视频</a>
+    </p>
+  </header>
+
+  <section class="stats" id="stats"></section>
+  <section class="podium" id="podium"></section>
+
+  <section class="chart-wrap">
+    <div class="sec-head">
+      <h2>月度评论量</h2>
+      <p class="hint" id="chartHint">按月。2026-02 那一柱是新宣传片放出后的刷评，单日能过百万，所以不用日线。</p>
+    </div>
+    <div class="chart-box">
+      <canvas id="chart"></canvas>
+      <div id="tip" class="tip" hidden></div>
+    </div>
+  </section>
+
+  <section class="board">
+    <div class="board-head">
+      <div>
+        <h2>完整榜单</h2>
+        <p class="hint" id="shown"></p>
+      </div>
+      <input id="q" type="search" placeholder="搜索用户名或 UID" autocomplete="off" />
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th class="col-rank">排名</th>
+            <th>用户</th>
+            <th class="col-num">评论</th>
+            <th class="col-num">点赞</th>
+            <th>样例</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="pager" id="pager"></div>
+  </section>
+
+  <footer>
+    数据未完，名次会变。样例截断。完整原文在本地 CSV，不要上传 GitHub。
+  </footer>
+  <script src="./assets/app.js"></script>
+</body>
+</html>
