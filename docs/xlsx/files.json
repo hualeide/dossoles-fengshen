@@ -4,55 +4,55 @@
       "file": "rank-01.csv",
       "from": 1,
       "to": 50000,
-      "size": 9893856
+      "size": 10944796
     },
     {
       "file": "rank-02.csv",
       "from": 50001,
       "to": 100000,
-      "size": 9710461
+      "size": 10761403
     },
     {
       "file": "rank-03.csv",
       "from": 100001,
       "to": 150000,
-      "size": 9601229
+      "size": 10652189
     },
     {
       "file": "rank-04.csv",
       "from": 150001,
       "to": 200000,
-      "size": 9096469
+      "size": 10147462
     },
     {
       "file": "rank-05.csv",
       "from": 200001,
       "to": 250000,
-      "size": 9725192
+      "size": 10776266
     },
     {
       "file": "rank-06.csv",
       "from": 250001,
       "to": 300000,
-      "size": 8242710
+      "size": 9293571
     },
     {
       "file": "rank-07.csv",
       "from": 300001,
       "to": 350000,
-      "size": 9216982
+      "size": 10268122
     },
     {
       "file": "rank-08.csv",
       "from": 350001,
       "to": 400000,
-      "size": 9355009
+      "size": 10406017
     },
     {
       "file": "rank-09.csv",
       "from": 400001,
       "to": 414217,
-      "size": 2855342
+      "size": 3154132
     }
   ],
   "monthly": "monthly.csv",
@@ -67,6 +67,6 @@
     "rank-08.xlsx",
     "rank-09.xlsx"
   ],
-  "note": "国内请下 CSV（Excel可开）。jsDelivr 拦截 xlsx。",
+  "note": "国内下 CSV。UID 和日期已按文本导出，避免科学计数和显示成 ####。",
   "cdn": "https://cdn.jsdelivr.net/gh/hualeide/dossoles-fengshen@main/docs/xlsx/"
 }

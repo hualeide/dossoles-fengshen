@@ -534,7 +534,7 @@ XLSX_DIR = ROOT / "docs" / "xlsx"
 
 def build_xlsx_parts() -> Path:
     XLSX_DIR.mkdir(parents=True, exist_ok=True)
-    for old in XLSX_DIR.glob("rank-*.xlsx"):
+    for old in list(XLSX_DIR.glob("rank-*.xlsx")) + list(XLSX_DIR.glob("rank-*.csv")):
         old.unlink()
     header_opts = {
         "constant_memory": True,
@@ -545,18 +545,25 @@ def build_xlsx_parts() -> Path:
     header_fmt_args = {"bold": True, "bg_color": "#1F4E79", "font_color": "white", "border": 1}
 
     files: list[dict] = []
+    csv_files: list[dict] = []
     wb = None
     ws = None
     header_fmt = None
+    uid_fmt = None
+    date_fmt = None
+    wrap_fmt = None
+    int_fmt = None
+    csv_buf: list[list] = []
     part = 0
     in_part = 0
     start_rank = 1
     n = 0
 
     def close_part() -> None:
-        nonlocal wb, part, in_part, start_rank
+        nonlocal wb, part, in_part, start_rank, csv_buf
         if wb is None:
             return
+        ws.autofilter(0, 0, in_part, 8)
         wb.close()
         path = XLSX_DIR / f"rank-{part:02d}.xlsx"
         files.append(
@@ -567,24 +574,47 @@ def build_xlsx_parts() -> Path:
                 "size": path.stat().st_size,
             }
         )
-        print(f"xlsx={path.name} rows={in_part} size={path.stat().st_size}", flush=True)
+        csv_path = XLSX_DIR / f"rank-{part:02d}.csv"
+        with csv_path.open("w", encoding="utf-8-sig", newline="") as f:
+            w = csv.writer(f, quoting=csv.QUOTE_MINIMAL)
+            w.writerow(PART_HEADERS)
+            w.writerows(csv_buf)
+        csv_files.append(
+            {
+                "file": csv_path.name,
+                "from": start_rank,
+                "to": start_rank + in_part - 1,
+                "size": csv_path.stat().st_size,
+            }
+        )
+        print(f"xlsx={path.name} csv={csv_path.name} rows={in_part}", flush=True)
         wb = None
+        csv_buf = []
 
     def open_part() -> None:
-        nonlocal wb, ws, header_fmt, part, in_part, start_rank
+        nonlocal wb, ws, header_fmt, uid_fmt, date_fmt, wrap_fmt, int_fmt
+        nonlocal part, in_part, start_rank, csv_buf
         part += 1
         in_part = 0
         start_rank = n + 1
+        csv_buf = []
         path = XLSX_DIR / f"rank-{part:02d}.xlsx"
         wb = xlsxwriter.Workbook(str(path), header_opts)
-        header_fmt = wb.add_format(header_fmt_args)
+        header_fmt = wb.add_format({**header_fmt_args, "align": "center", "valign": "vcenter"})
+        uid_fmt = wb.add_format({"align": "left", "num_format": "@"})
+        date_fmt = wb.add_format({"align": "left", "num_format": "@"})
+        wrap_fmt = wb.add_format({"text_wrap": True, "valign": "top"})
+        int_fmt = wb.add_format({"num_format": "#,##0", "align": "right"})
         ws = wb.add_worksheet("封神榜")
         ws.write_row(0, 0, PART_HEADERS, header_fmt)
-        ws.set_column(0, 0, 8)
-        ws.set_column(1, 1, 22)
-        ws.set_column(2, 2, 14)
-        ws.set_column(6, 7, 20)
-        ws.set_column(8, 8, 48)
+        ws.set_column(0, 0, 10)
+        ws.set_column(1, 1, 24)
+        ws.set_column(2, 2, 16)
+        ws.set_column(3, 3, 8)
+        ws.set_column(4, 5, 12)
+        ws.set_column(6, 7, 22)
+        ws.set_column(8, 8, 56)
+        ws.set_row(0, 22)
         ws.freeze_panes(1, 0)
 
     with CSV_USERS.open("r", encoding="utf-8-sig", newline="") as f:
@@ -596,27 +626,54 @@ def build_xlsx_parts() -> Path:
             while len(row) < 14:
                 row.append("")
             sample = xml_cell((row[13] or "").split(" | ")[0], 48)
-            out = [
-                row[0],
-                xml_cell(row[1]),
-                row[2],
-                row[3],
-                row[5],
-                row[7],
-                row[8],
-                row[9],
-                sample,
-            ]
+            uid = str(row[2] or "").strip()
+            first = (row[8] or "").strip()
+            last = (row[9] or "").strip()
+            r = in_part + 1
+            try:
+                ws.write_number(r, 0, int(row[0] or n + 1), int_fmt)
+            except Exception:
+                ws.write(r, 0, row[0])
+            ws.write_string(r, 1, xml_cell(row[1]))
+            ws.write_string(r, 2, uid, uid_fmt)
+            try:
+                ws.write_number(r, 3, int(row[3] or 0), int_fmt)
+            except Exception:
+                ws.write(r, 3, row[3])
+            try:
+                ws.write_number(r, 4, int(row[5] or 0), int_fmt)
+            except Exception:
+                ws.write(r, 4, row[5])
+            try:
+                ws.write_number(r, 5, int(row[7] or 0), int_fmt)
+            except Exception:
+                ws.write(r, 5, row[7])
+            ws.write_string(r, 6, first, date_fmt)
+            ws.write_string(r, 7, last, date_fmt)
+            ws.write_string(r, 8, sample, wrap_fmt)
+            # CSV：UID/日期当文本，避免科学计数和 ####
+            csv_buf.append(
+                [
+                    row[0],
+                    xml_cell(row[1]),
+                    f'="{uid}"' if uid else "",
+                    row[3],
+                    row[5],
+                    row[7],
+                    f'="{first}"' if first else "",
+                    f'="{last}"' if last else "",
+                    sample,
+                ]
+            )
             in_part += 1
             n += 1
-            ws.write_row(in_part, 0, out)
             if in_part >= PART_SIZE:
                 close_part()
         close_part()
 
     mpath = XLSX_DIR / "monthly.xlsx"
     wb = xlsxwriter.Workbook(str(mpath), header_opts)
-    header_fmt = wb.add_format(header_fmt_args)
+    header_fmt = wb.add_format({**header_fmt_args, "align": "center"})
     ws = wb.add_worksheet("月度")
     ws.write_row(0, 0, ["月份", "评论数"], header_fmt)
     month: dict[str, int] = {}
@@ -629,15 +686,24 @@ def build_xlsx_parts() -> Path:
             key = (row[0] or "")[:7]
             if len(key) == 7:
                 month[key] = month.get(key, 0) + int(row[1] or 0)
+    int_fmt = wb.add_format({"num_format": "#,##0"})
     for i, k in enumerate(sorted(month), 1):
-        ws.write(i, 0, k)
-        ws.write_number(i, 1, month[k])
+        ws.write_string(i, 0, k)
+        ws.write_number(i, 1, month[k], int_fmt)
     ws.set_column(0, 0, 12)
+    ws.set_column(1, 1, 14)
     wb.close()
+    csv_month = XLSX_DIR / "monthly.csv"
+    with csv_month.open("w", encoding="utf-8-sig", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["月份", "评论数"])
+        for k in sorted(month):
+            w.writerow([k, month[k]])
     manifest = {
-        "parts": files,
-        "monthly": "monthly.xlsx",
-        "note": "未完成稿。样例截断。完整拼接在本地CSV。",
+        "parts": csv_files,
+        "monthly": "monthly.csv",
+        "xlsx_parts": [p["file"] for p in files],
+        "note": "国内下 CSV。UID 和日期已按文本导出，避免科学计数和显示成 ####。",
         "cdn": "https://cdn.jsdelivr.net/gh/hualeide/dossoles-fengshen@main/docs/xlsx/",
     }
     (XLSX_DIR / "files.json").write_text(
