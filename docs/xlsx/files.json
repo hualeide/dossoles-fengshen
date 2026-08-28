@@ -1,61 +1,72 @@
 {
   "parts": [
     {
-      "file": "rank-01.xlsx",
+      "file": "rank-01.csv",
       "from": 1,
       "to": 50000,
-      "size": 5577799
+      "size": 9893856
     },
     {
-      "file": "rank-02.xlsx",
+      "file": "rank-02.csv",
       "from": 50001,
       "to": 100000,
-      "size": 5181761
+      "size": 9710461
     },
     {
-      "file": "rank-03.xlsx",
+      "file": "rank-03.csv",
       "from": 100001,
       "to": 150000,
-      "size": 5071315
+      "size": 9601229
     },
     {
-      "file": "rank-04.xlsx",
+      "file": "rank-04.csv",
       "from": 150001,
       "to": 200000,
-      "size": 4893884
+      "size": 9096469
     },
     {
-      "file": "rank-05.xlsx",
+      "file": "rank-05.csv",
       "from": 200001,
       "to": 250000,
-      "size": 4984119
+      "size": 9725192
     },
     {
-      "file": "rank-06.xlsx",
+      "file": "rank-06.csv",
       "from": 250001,
       "to": 300000,
-      "size": 4205702
+      "size": 8242710
     },
     {
-      "file": "rank-07.xlsx",
+      "file": "rank-07.csv",
       "from": 300001,
       "to": 350000,
-      "size": 4761641
+      "size": 9216982
     },
     {
-      "file": "rank-08.xlsx",
+      "file": "rank-08.csv",
       "from": 350001,
       "to": 400000,
-      "size": 4334058
+      "size": 9355009
     },
     {
-      "file": "rank-09.xlsx",
+      "file": "rank-09.csv",
       "from": 400001,
       "to": 414217,
-      "size": 1220653
+      "size": 2855342
     }
   ],
-  "monthly": "monthly.xlsx",
-  "note": "未完成稿。样例截断。完整拼接在本地CSV。",
+  "monthly": "monthly.csv",
+  "xlsx_parts": [
+    "rank-01.xlsx",
+    "rank-02.xlsx",
+    "rank-03.xlsx",
+    "rank-04.xlsx",
+    "rank-05.xlsx",
+    "rank-06.xlsx",
+    "rank-07.xlsx",
+    "rank-08.xlsx",
+    "rank-09.xlsx"
+  ],
+  "note": "国内请下 CSV（Excel可开）。jsDelivr 拦截 xlsx。",
   "cdn": "https://cdn.jsdelivr.net/gh/hualeide/dossoles-fengshen@main/docs/xlsx/"
 }
