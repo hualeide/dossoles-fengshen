@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import re
 import sqlite3
 import sys
@@ -516,8 +517,140 @@ def build_xlsx_lean() -> Path:
     return dest
 
 
+PART_HEADERS = [
+    "排名",
+    "用户名",
+    "UID",
+    "等级",
+    "评论数",
+    "点赞合计",
+    "首次评论",
+    "末次评论",
+    "评论样例",
+]
+PART_SIZE = 50000
+XLSX_DIR = ROOT / "docs" / "xlsx"
+
+
+def build_xlsx_parts() -> Path:
+    XLSX_DIR.mkdir(parents=True, exist_ok=True)
+    for old in XLSX_DIR.glob("rank-*.xlsx"):
+        old.unlink()
+    header_opts = {
+        "constant_memory": True,
+        "strings_to_urls": False,
+        "strings_to_formulas": False,
+        "strings_to_numbers": False,
+    }
+    header_fmt_args = {"bold": True, "bg_color": "#1F4E79", "font_color": "white", "border": 1}
+
+    files: list[dict] = []
+    wb = None
+    ws = None
+    header_fmt = None
+    part = 0
+    in_part = 0
+    start_rank = 1
+    n = 0
+
+    def close_part() -> None:
+        nonlocal wb, part, in_part, start_rank
+        if wb is None:
+            return
+        wb.close()
+        path = XLSX_DIR / f"rank-{part:02d}.xlsx"
+        files.append(
+            {
+                "file": path.name,
+                "from": start_rank,
+                "to": start_rank + in_part - 1,
+                "size": path.stat().st_size,
+            }
+        )
+        print(f"xlsx={path.name} rows={in_part} size={path.stat().st_size}", flush=True)
+        wb = None
+
+    def open_part() -> None:
+        nonlocal wb, ws, header_fmt, part, in_part, start_rank
+        part += 1
+        in_part = 0
+        start_rank = n + 1
+        path = XLSX_DIR / f"rank-{part:02d}.xlsx"
+        wb = xlsxwriter.Workbook(str(path), header_opts)
+        header_fmt = wb.add_format(header_fmt_args)
+        ws = wb.add_worksheet("封神榜")
+        ws.write_row(0, 0, PART_HEADERS, header_fmt)
+        ws.set_column(0, 0, 8)
+        ws.set_column(1, 1, 22)
+        ws.set_column(2, 2, 14)
+        ws.set_column(6, 7, 20)
+        ws.set_column(8, 8, 48)
+        ws.freeze_panes(1, 0)
+
+    with CSV_USERS.open("r", encoding="utf-8-sig", newline="") as f:
+        reader = csv.reader(f)
+        next(reader, None)
+        for row in reader:
+            if wb is None:
+                open_part()
+            while len(row) < 14:
+                row.append("")
+            sample = xml_cell((row[13] or "").split(" | ")[0], 48)
+            out = [
+                row[0],
+                xml_cell(row[1]),
+                row[2],
+                row[3],
+                row[5],
+                row[7],
+                row[8],
+                row[9],
+                sample,
+            ]
+            in_part += 1
+            n += 1
+            ws.write_row(in_part, 0, out)
+            if in_part >= PART_SIZE:
+                close_part()
+        close_part()
+
+    mpath = XLSX_DIR / "monthly.xlsx"
+    wb = xlsxwriter.Workbook(str(mpath), header_opts)
+    header_fmt = wb.add_format(header_fmt_args)
+    ws = wb.add_worksheet("月度")
+    ws.write_row(0, 0, ["月份", "评论数"], header_fmt)
+    month: dict[str, int] = {}
+    with CSV_HOURS.open("r", encoding="utf-8-sig", newline="") as f:
+        r = csv.reader(f)
+        next(r, None)
+        for row in r:
+            if len(row) < 2:
+                continue
+            key = (row[0] or "")[:7]
+            if len(key) == 7:
+                month[key] = month.get(key, 0) + int(row[1] or 0)
+    for i, k in enumerate(sorted(month), 1):
+        ws.write(i, 0, k)
+        ws.write_number(i, 1, month[k])
+    ws.set_column(0, 0, 12)
+    wb.close()
+    manifest = {
+        "parts": files,
+        "monthly": "monthly.xlsx",
+        "note": "未完成稿。样例截断。完整拼接在本地CSV。",
+        "cdn": "https://cdn.jsdelivr.net/gh/hualeide/dossoles-fengshen@main/docs/xlsx/",
+    }
+    (XLSX_DIR / "files.json").write_text(
+        json.dumps(manifest, ensure_ascii=False, indent=2), encoding="utf-8"
+    )
+    print(f"parts={len(files)} users={n} monthly={mpath.stat().st_size}")
+    return XLSX_DIR
+
+
 if __name__ == "__main__":
-    if "--lean" in sys.argv:
+    if "--parts" in sys.argv:
+        build_xlsx_parts()
+    elif "--lean" in sys.argv:
         build_xlsx_lean()
     elif "--from-csv" in sys.argv:
         out = XLSX

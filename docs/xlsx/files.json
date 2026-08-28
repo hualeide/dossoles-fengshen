@@ -1,0 +1,61 @@
+{
+  "parts": [
+    {
+      "file": "rank-01.xlsx",
+      "from": 1,
+      "to": 50000,
+      "size": 5577799
+    },
+    {
+      "file": "rank-02.xlsx",
+      "from": 50001,
+      "to": 100000,
+      "size": 5181761
+    },
+    {
+      "file": "rank-03.xlsx",
+      "from": 100001,
+      "to": 150000,
+      "size": 5071315
+    },
+    {
+      "file": "rank-04.xlsx",
+      "from": 150001,
+      "to": 200000,
+      "size": 4893884
+    },
+    {
+      "file": "rank-05.xlsx",
+      "from": 200001,
+      "to": 250000,
+      "size": 4984119
+    },
+    {
+      "file": "rank-06.xlsx",
+      "from": 250001,
+      "to": 300000,
+      "size": 4205702
+    },
+    {
+      "file": "rank-07.xlsx",
+      "from": 300001,
+      "to": 350000,
+      "size": 4761641
+    },
+    {
+      "file": "rank-08.xlsx",
+      "from": 350001,
+      "to": 400000,
+      "size": 4334058
+    },
+    {
+      "file": "rank-09.xlsx",
+      "from": 400001,
+      "to": 414217,
+      "size": 1220653
+    }
+  ],
+  "monthly": "monthly.xlsx",
+  "note": "未完成稿。样例截断。完整拼接在本地CSV。",
+  "cdn": "https://cdn.jsdelivr.net/gh/hualeide/dossoles-fengshen@main/docs/xlsx/"
+}

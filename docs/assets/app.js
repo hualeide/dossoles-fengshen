@@ -46,6 +46,10 @@ async function load() {
   lastDaily = daily;
   document.getElementById("note").textContent = ov.note;
   document.getElementById("video").href = ov.video;
+  if (location.hostname.includes("jsdelivr")) {
+    const m = document.getElementById("mirror");
+    if (m) m.hidden = true;
+  }
   document.getElementById("stats").innerHTML = [
     ["B站显示", fmt(ov.official)],
     ["已入库", fmt(ov.stored)],
@@ -57,6 +61,7 @@ async function load() {
     .map(([k, v]) => `<div class="stat"><b>${v}</b><span>${k}</span></div>`)
     .join("");
   drawMonthChart(daily);
+  loadDownloads();
 
   const files = ov.files || ["rank.json"];
   document.getElementById("shown").textContent = "正在载入榜单…";
@@ -76,6 +81,22 @@ async function load() {
   document.getElementById("shown").textContent =
     "共 " + fmt(ranks.length) + " 人 · 样例截断 " + SAMPLE_HINT + " 字 · " + ov.exported;
   render();
+}
+
+async function loadDownloads() {
+  const box = document.getElementById("dlList");
+  try {
+    const man = await fetch("./xlsx/files.json").then((r) => r.json());
+    const items = [`<a href="./xlsx/${man.monthly}">月度统计</a>`];
+    for (const p of man.parts || []) {
+      items.push(
+        `<a href="./xlsx/${p.file}">第 ${fmt(p.from)}–${fmt(p.to)} 名</a>`
+      );
+    }
+    box.innerHTML = items.join("");
+  } catch (e) {
+    box.textContent = "表格清单加载失败";
+  }
 }
 
 function renderPodium() {

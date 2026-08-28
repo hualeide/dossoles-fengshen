@@ -13,7 +13,9 @@ python export_rank.py
 
 输出：`out/明日方舟_多索雷斯假日_评论用户统计.xlsx`
 
-网页：https://hualeide.github.io/dossoles-fengshen/
+网页（国内免代理）：https://cdn.jsdelivr.net/gh/hualeide/dossoles-fengshen@main/docs/index.html
+
+GitHub Pages：https://hualeide.github.io/dossoles-fengshen/
 
 源码在 `docs/`。本地预览：`python -m http.server 8766`（在 `docs/` 下）。
 

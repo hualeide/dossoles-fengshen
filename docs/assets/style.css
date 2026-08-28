@@ -34,7 +34,18 @@ a:hover { text-decoration: underline; }
 }
 .kicker, .hint, .sub, footer { color: var(--muted); margin: 0; }
 .note { color: var(--gold); margin: 10px 0 0; font-size: 13px; }
-.links { margin: 12px 0 0; }
+.links { margin: 12px 0 0; display: flex; gap: 16px; flex-wrap: wrap; }
+.dl h2 { margin: 0 0 6px; font-size: 18px; }
+.dl-list { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.dl-list a {
+  background: var(--card);
+  border: 1px solid var(--line);
+  color: var(--text);
+  padding: 8px 12px;
+  text-decoration: none;
+  font-variant-numeric: tabular-nums;
+}
+.dl-list a:hover { border-color: var(--gold); color: var(--gold); }
 .stats {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(132px, 1fr));
