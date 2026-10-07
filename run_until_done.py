@@ -9,6 +9,7 @@ import shutil
 import sqlite3
 import subprocess
 import sys
+import tempfile
 import time
 from datetime import datetime
 from pathlib import Path
@@ -77,7 +78,25 @@ def export() -> None:
     if p.returncode != 0:
         raise RuntimeError(f"export failed {p.returncode}")
     OUT.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(DB, OUT / "comments.sqlite")
+    dest = OUT / "comments.sqlite"
+    fd, name = tempfile.mkstemp(prefix=".comments-", suffix=".sqlite", dir=OUT)
+    os.close(fd)
+    tmp = Path(name)
+    try:
+        src = sqlite3.connect(f"file:{DB.resolve().as_posix()}?mode=ro", uri=True, timeout=60)
+        try:
+            dst = sqlite3.connect(tmp)
+            try:
+                src.backup(dst)
+            finally:
+                dst.close()
+            os.replace(tmp, dest)
+        finally:
+            src.close()
+    finally:
+        tmp.unlink(missing_ok=True)
+        Path(str(tmp) + "-wal").unlink(missing_ok=True)
+        Path(str(tmp) + "-shm").unlink(missing_ok=True)
     if CKPT.exists():
         shutil.copy2(CKPT, OUT / "checkpoint.json")
 
