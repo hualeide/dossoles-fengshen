@@ -5,7 +5,9 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import sqlite3
+import tempfile
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
@@ -31,11 +33,29 @@ def sample_of(text: str) -> str:
     return s[:SAMPLE_MAX]
 
 
+def _stage(directory: Path, text: str) -> Path:
+    fd, name = tempfile.mkstemp(prefix=".part-", suffix=".tmp", dir=directory)
+    os.close(fd)
+    tmp = Path(name)
+    try:
+        tmp.write_text(text, encoding="utf-8")
+    except Exception:
+        tmp.unlink(missing_ok=True)
+        raise
+    return tmp
+
+
 def main() -> None:
     OUT.mkdir(parents=True, exist_ok=True)
-    for old in OUT.glob("rank*.json"):
-        old.unlink()
+    staged: list[tuple[str, Path]] = []
+    try:
+        _build(staged)
+    finally:
+        for _, tmp in staged:
+            tmp.unlink(missing_ok=True)
 
+
+def _build(staged: list[tuple[str, Path]]) -> None:
     conn = sqlite3.connect(f"file:{DB.as_posix()}?mode=ro", uri=True, timeout=60)
     official_row = conn.execute("SELECT v FROM meta WHERE k='official_count'").fetchone()
     official_n = int(official_row[0]) if official_row else 0
@@ -54,9 +74,8 @@ def main() -> None:
         if not chunk:
             return
         name = f"rank-{idx:02d}.json"
-        (OUT / name).write_text(
-            json.dumps(chunk, ensure_ascii=False, separators=(",", ":")),
-            encoding="utf-8",
+        staged.append(
+            (name, _stage(OUT, json.dumps(chunk, ensure_ascii=False, separators=(",", ":"))))
         )
         files.append(name)
         print(f"write {name} n={len(chunk)}", flush=True)
@@ -112,13 +131,19 @@ def main() -> None:
         "files": files,
         "cols": ["r", "n", "id", "c", "lk", "s"],
     }
-    (OUT / "overview.json").write_text(
-        json.dumps(overview, ensure_ascii=False, indent=2), encoding="utf-8"
-    )
-    (OUT / "daily.json").write_text(
-        json.dumps(daily_list, ensure_ascii=False, separators=(",", ":")),
-        encoding="utf-8",
-    )
+    overview_text = json.dumps(overview, ensure_ascii=False, indent=2)
+    daily_text = json.dumps(daily_list, ensure_ascii=False, separators=(",", ":"))
+    staged.append(("daily.json", _stage(OUT, daily_text)))
+    staged.append(("overview.json", _stage(OUT, overview_text)))
+    keep: set[str] = set()
+    for name, tmp in staged:
+        os.replace(tmp, OUT / name)
+        if name.startswith("rank"):
+            keep.add(name)
+    staged.clear()
+    for old in OUT.glob("rank*.json"):
+        if old.name not in keep:
+            old.unlink()
     sizes = sum((OUT / name).stat().st_size for name in files)
     print(f"ranks={total} files={len(files)} bytes={sizes} daily={len(daily_list)}")
 
